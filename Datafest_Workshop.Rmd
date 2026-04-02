@@ -1,0 +1,517 @@
+---
+title: "DataFest: Data Science Software 101"
+authors: "Sofia Cominelli and Aastha Gautam"
+subtitle: "March 2, 2026"
+fontsize: 12pt
+geometry: margin=1in
+output:
+  output: html_document
+  number_sections: true
+header-includes:
+  - \usepackage{setspace}
+  - \doublespacing
+---
+
+# Outline
+
+-   Intro to R
+-   Data wrangling
+-   Data Visualization with ggplot2
+-   Data Modeling
+
+![](Figure1.jpg){width="80%"}
+
+![](Learning1.jpg){width="80%"}
+
+We will use daily weather data from Kansas Mesonet Station in Manhattan, KS and will create a dataset for wheats variesties.
+
+# General Coding Rules
+
+1)  **Define a goal** Example: explore weather patterns in Manhattan over the last five years.
+2)  **Plan the steps**: import data, clean variables, summarize, then visualize.
+3)  Confirm you have the right **packages** loaded, then start coding in **small steps**.
+
+# What is R?
+
+R is a language and environment for statistical computing and graphics.
+
+Check documentation: <https://www.r-project.org/about.html>
+
+Download R: <https://posit.co/download/rstudio-desktop/>
+
+# What is an R package?
+
+An R package is a bundle of tools that adds new functions to R. Packages often include:
+
+-   Functions (new commands you can use)
+
+-   Example datasets
+
+-   Documentation and help pages
+
+In this workshop we use packages because they make common tasks easier:
+
+-   *tidyverse*: import, clean, and summarize data
+
+-   *ggplot2*: create plots
+
+# RStudio explanation
+
+RStudio is an interface that helps you write, run, and organize your R work. When you open RStudio, you will see four main panes:
+
+**Script (Source)**: Where you write and save your code. This is the best place to build your analysis step by step.
+
+**Console**: Where code runs and results print. You can type commands here, but it is better to keep important code in the Script so you can reuse it later.
+
+**Environment**: Shows the objects in your current session, such as data frames, variables, and models. Use it to confirm that your data loaded correctly and to check what objects you created.
+
+**Files, Plots, Packages, Help**: A pane with several tabs:
+
+-   Files: Browse folders, open files, and set your working directory.
+
+-   Plots: Displays graphs created by your code.
+
+-   Packages: Install packages (one time) and load them for your session.
+
+-   Help: Search documentation for functions, see examples, and read details about inputs and outputs.
+
+![](R_studio.jpeg){width="80%"}
+
+*Tip*: If you see an error like “could not find function”, it often means the package that contains that function is not loaded. Use library(package_name)
+
+# Good coding habits
+
+A simple way to avoid confusion in data projects is to stay organized from the beginning.
+
+1)  Create one folder per project
+
+Every project should have its own folder.
+
+Do not mix files from different projects in the same place. Keeping everything in one dedicated folder reduces confusion and prevents lost files.
+
+2)  Organize your project with subfolders
+
+Inside your main project folder, it is a good idea to create subfolders. A simple structure could look like this:
+
+    my_project/
+          |
+        data/ → raw data and cleaned datasets
+          |
+        scripts/ → R scripts or R Markdown files
+          |
+        figures/ → saved plots and images
+          |
+        writing/ → notes, reports, or manuscripts
+        
+
+3)  Use an RStudio Project
+
+Inside your project folder, create an RStudio Project file (.Rproj).
+
+When you open the .Rproj file:
+
+-   RStudio automatically sets the working directory to that folder
+
+-   File paths become more reliable
+
+-   You avoid many common errors when reading or saving files
+
+# Coding
+
+### Load Packages
+
+```{r, message=FALSE, warning=FALSE}
+# tidyverse includes dplyr and ggplot2
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+```
+
+
+
+### Import the data
+
+We will load daily weather data from the Kansas Mesonet station in Manhattan, KS. The dataset is provided in CSV format.
+
+Each column represents a different weather variable (for example temperature, precipitation, wind speed, or solar radiation), and each row corresponds to a specific date and time when the measurements were recorded.
+
+This structure is common in time series data:
+
+-   Columns = variables
+
+-   Rows = observations over time
+
+Before doing any analysis, it is important to understand what each row and column represents.
+
+```{r}
+df_raw <- read.csv("Mesonet_weather_data.csv")
+df_raw <- read.csv("Mesonet_weather_data.csv")
+
+```
+
+Explore the dataset
+
+```{r}
+summary(df_raw)
+
+```
+
+### Clean the data and rename variables
+
+We rename columns to make them easier to read and use.
+
+```{r}
+# Change the columns names, change date format and remove station using a pipe function
+colnames(df_raw)
+
+df_ready <- df_raw %>%
+  rename( date = TIMESTAMP,
+    station = STATION,
+    temp_min = TEMP2MMIN,
+    temp_max = TEMP2MMAX,
+    rel_humidity = RELHUM2MAVG,
+    vpd = VPDEFAVG,
+    precip = PRECIP,
+    solar_rad = SRAVG,
+    wind_speed = WSPD2MAVG,
+    soil_temp_10 = SOILTMP10AVG,
+    soil_moisture_10 = VWC10CM)%>%
+  mutate(date = as.Date(date),
+         year = year(date)) %>%
+  select(-station)
+
+```
+
+### Explore extremes
+
+In this section, we explore the dataset by finding extreme events: the hottest day, the coldest day, and the windiest days. This is a quick way to check that the data look reasonable and to learn what kinds of values are in the dataset.
+
+```{r}
+# Hottest day
+max(df_ready$temp_max, na.rm = TRUE)
+df_ready$date[which.max(df_ready$temp_max)]
+
+
+# Coldest day
+min(df_ready$temp_min, na.rm = TRUE)
+df_ready$date[which.min(df_ready$temp_min)]
+
+# Windiest day
+df_ready$date[which.max(df_ready$wind_speed)]
+
+# Top 5 windiest days
+i <- order(df_ready$wind_speed, decreasing = TRUE)
+df_ready[i[1:5], c("date", "wind_speed")]
+```
+
+### Create new variables and convert units
+
+In this section we create new columns from existing ones. We use the pipe operator %\>%, which means: “take the data on the left and pass it into the next step”. This helps us write code in a clear, step by step way.
+
+```{r}
+# Create new variables using mutate()
+# mutate() adds new columns without changing the original ones
+
+
+df_ready <- df_ready %>%
+  mutate(temp_avg = (temp_min + temp_max)/2) # Average daily temperature (F)
+
+
+# Convert precipitation from millimeters to inches (only if needed)
+
+df_ready <- df_ready %>%
+  mutate(precip = precip * 0.03937)
+
+```
+
+# Data Visualization with ggplot2
+
+Data visualization turns raw numbers into visuals we can understand. It helps us see patterns, trends, and, outliers in your data. In R, one of the most popular packages for data visualization is *ggplot2*.
+
+### Some basic principles include:
+
+-   Clarity and simplicity
+-   Right visualization for right data
+-   Colors and visual coordination
+
+### 1. Clarity and Simplicity
+
+#### Timeseries plot
+
+```{r}
+# Solar radiation over time (colored by year)
+ggplot(df_ready, aes(x= date, y = solar_rad, colour = factor(year))) +
+  geom_line()
+         
+         
+ggplot(df_ready, aes(x = date, y = solar_rad, colour = factor(year))) +
+  geom_line(alpha = 0.9) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(title = "Solar radiation across years",
+    x = "Year",
+    y = "Solar radiation",
+    colour = "Year"
+  )
+```
+
+This plot shows a strong seasonal pattern. Solar radiation is highest in summer and lowest in winter, and the pattern is consistent across years.
+
+## 2. Right Visualization for Right Data
+
+How you visualize the distribution of a variable depends on the type of variable: **categorical** or **continuous**. For categorical variables, we can use bar plots or pie charts. For continuous variables, we can use histograms, density plots, or boxplots.
+
+#### Barplot
+
+```{r}
+# Total annual precipitation (inches)
+df_year <- df_ready %>%
+  group_by(year) %>%
+  summarise(precip_total = sum(precip, na.rm = TRUE),
+    .groups = "drop")
+
+
+ggplot(df_year, aes(x = year, y = precip_total, fill = factor(year))) +
+  geom_col() +
+  scale_x_continuous(breaks = df_year$year) +
+  labs(title = "Total annual precipitation",
+    x = "Year",
+    y = "Total precipitation (in)",
+    fill = "Year") 
+```
+
+Which year had the lowest total annual precipitation? Which year had the highest total annual precipitation?
+
+#### Boxplot
+
+```{r, warning = FALSE, message = FALSE}
+ggplot(df_ready, aes(x = factor(year), y = temp_avg, fill = factor(year))) +
+  geom_boxplot() +
+  labs(title = "Boxplot of minimum temperature by year",
+    x = "Year",
+    y = "Minimum temperature (F)",
+    fill = "Year") 
+```
+
+To visualize the relationship between a numerical and a categorical variable we can use box-plots. A boxplot is a type of visual shorthand for measures. According to thisplot which year appears to have the lowest?
+
+Do you notice differences in variability between years?
+
+## 2.1 Visualizing relationships between variables
+
+#### Scatter plot
+
+```{r, warning = FALSE, message = FALSE}
+ggplot(df_ready, aes(x = vpd, y = rel_humidity)) +
+         geom_point(alpha = .4, color = "blue", size = 3) + 
+  labs(title = " Relationship between weather variables",
+       x = "Vapor presure deficit (kPa)",
+       y = "Relative humidity (%)")
+
+```
+
+## 3. Colors and Visual Coordination
+
+Color is not only aesthetic. It communicates information. In this section, we explore how to use color intentionally depending on the type of variable we are visualizing
+
+Continuous heatmaps and gradients When a variable is continuous (for example temperature, yield, nitrogen rate), we use a color gradient to show low to high values.
+
+#### Heatmap
+
+```{r}
+# Average temperature for each month and year
+df_month_heat <- df_ready %>%
+  mutate(date = as.Date(date),
+    year = year(date),
+    month = month(date, label = TRUE, abbr = TRUE)) %>%
+  group_by(year, month) %>%
+  summarise(temp_avg_month = mean(temp_avg, na.rm = TRUE),
+    precip_total_month = sum(precip, na.rm = TRUE),
+    .groups = "drop")
+
+ggplot(df_month_heat, aes(x = month, y = factor(year), fill = temp_avg_month)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "#2c7bb6",
+    mid = "white",
+    high = "#d7191c",
+    midpoint = median(df_month_heat$temp_avg_month, na.rm = TRUE)
+  ) +
+  labs(
+    title = "Monthly Average Temperature Heat Map",
+    x = "Month",
+    y = "Year",
+    fill = "Temp (F)"
+  ) +
+  theme_classic(base_size = 16)
+```
+
+This type of gradient is useful when the data represent a scale from low to high.
+
+What seasonal patterns do you observe?
+
+Which months are consistently warmest?
+
+Continuous color scale using viridis
+
+The viridis color scale is perceptually uniform and colorblind friendly. It is ideal for continuous variables.
+
+```{r}
+
+set.seed(42)
+
+n <- 200
+
+data <- tibble(
+
+  location = sample(c("Hays", "Hoisington", "Russell"), n, replace = TRUE),
+
+  variety = sample(c("V1", "V2", "V3", "V4", "V5"), n, replace = TRUE),
+
+  nitrogen = runif(n, 0, 200),
+
+  yield = 20 + (0.5 * nitrogen) + rnorm(n, 0, 5) + 
+
+          case_when(variety == "V1" ~ 10, variety == "V2" ~ -5, TRUE ~ 0)
+
+)
+
+ggplot(data, aes(x = nitrogen, y = yield, color = yield)) +
+  geom_point(size = 3) +
+  scale_color_viridis_c(option = "viridis")
+```
+
+Good for groups (e.g., wheat varieties).
+
+```{r}
+ggplot(data, aes(x = nitrogen, y = yield, color = variety)) +
+  geom_point(size = 3) +
+  scale_color_brewer(palette = "Dark2")
+```
+
+Good for distinguishing all types of colorblindness. Includes high contrast, distinct shapes, universally accessible.
+
+```{r}
+
+okabe_ito <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+ggplot(data, aes(x = nitrogen, y = yield, color = variety)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = okabe_ito)
+```
+
+# Simple statistics: linear regression
+
+Now we fit a simple linear regression model to examine the relationship between soil temperature and air temperature.
+
+```{r, warning = FALSE, message = FALSE}
+# Linear regression between the maximum temperature and soil temperature
+colnames(df_ready)
+model <- lm(soil_temp_10 ~ temp_max , data = df_ready)
+summary(model)
+
+ggplot(df_ready, aes(x = temp_max, y = soil_temp_10)) +
+  geom_point(alpha = 0.3, size = 2, colour = "steelblue") +
+  theme_minimal() +
+  labs(
+    title = "Air temperature vs soil temperature",
+    x =  "Daily maximum air temperature (F)" ,
+    y = "Soil temperature (F)") 
+```
+
+# Bonus figure
+
+```{r}
+df_month_heat <- df_ready %>%
+  mutate(
+    date = as.Date(date),
+    year = lubridate::year(date),
+    month_num = lubridate::month(date),
+    month = lubridate::month(date, label = TRUE, abbr = TRUE)
+  ) %>%
+  group_by(year, month_num, month) %>%
+  summarise(
+    temp_avg_month = mean(temp_avg, na.rm = TRUE),
+    precip_total_month = sum(precip, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(year, month_num) %>%
+  mutate(frame_id = row_number())
+
+df_month_heat$month <- factor(df_month_heat$month, levels = month.abb)
+
+
+library(gganimate)
+library(gifski)
+
+p <- ggplot(df_month_heat, aes(x = month, y = factor(year), fill = temp_avg_month)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "#2c7bb6",
+    mid = "white",
+    high = "#d7191c",
+    midpoint = median(df_month_heat$temp_avg_month, na.rm = TRUE)
+  ) +
+  labs(
+    title = "Monthly Average Temperature Heat Map",
+    x = "Month",
+    y = "Year",
+    fill = "Temp (C)"
+  ) +
+  theme_classic(base_size = 16) +
+  transition_states(frame_id, state_length = 1, transition_length = 0) +
+  shadow_mark(alpha = 1) +
+  enter_fade()
+
+animate(
+  p,
+  nframes = nrow(df_month_heat) + 20,
+  fps = 12,
+  width = 900,
+  height = 550,
+  renderer = gifski_renderer()
+)
+```
+
+
+# Wrap up
+
+There is no single correct way to analyze data. There are different approaches, and each choice carries assumptions and consequences.
+
+Today you completed a full data workflow:
+
+-   Import data
+
+-   Clean and rename variables
+
+-   Create new features
+
+-   Explore extremes
+
+-   Summarize patterns
+
+-   Visualize trends
+
+-   Fit and interpret a simple linear model
+
+Data analysis is not just writing code. It is asking questions, checking assumptions, and interpreting results carefully.
+
+Small decisions matter:
+
+-   Units
+
+-   Missing values
+
+-   How you group data
+
+-   How you choose colors
+
+-   How you specify a model
+
+The goal is not to memorize code. The goal is to learn how to think about data.
+
+All workshop materials will be shared with you. Please feel free to contact us if you have questions or would like to continue exploring.
+
+Thank you for your time and engagement today. We hope this workshop made data feel more approachable and less intimidating.
+
+# Resources
+https://guides.lib.utexas.edu/datalab/r
